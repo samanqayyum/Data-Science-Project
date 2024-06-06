@@ -1,6 +1,8 @@
 # Project Metadata
+## Project Title:
+"Data-Driven Technical Analysis: Machine Learning for Stock Market Prediction and Portfolio Optimization" 
 
-## Overview
+## Project Overview:
 The Data Science Project aims to analyze company data using Python scripts. It includes CSV files containing data for various companies, alongside the DSProject.py script for data analysis and visualization. The project utilizes OneDrive for cloud synchronization and GitHub for version control and collaboration.
 
 ## Data
