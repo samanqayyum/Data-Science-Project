@@ -16,21 +16,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import GradientBoostingClassifier
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
 
 import warnings
 warnings.filterwarnings('ignore')
-
-sd = '2014-01-01'
-ed = '2024-12-31'
-data = yf.download("MSFT" ,start=sd, end=ed)
-data.to_csv("MSFT.csv")
-
-
-df = pd.read_csv("MSFT.csv")
-
-
-new_df = df[['Date', 'Adj Close','Volume']]
-new_df['Date'] = pd.to_datetime(new_df['Date'])
 
 
 def calculate_sma(ds, window):
@@ -43,7 +33,6 @@ def calculate_bollinger_bands(ds, window, num_std_dev):
     ds['Bollinger Upper Band'] = ds['Bollinger Middle Band'] + (rolling_std * num_std_dev)
     ds['Bollinger Lower Band'] = ds['Bollinger Middle Band'] - (rolling_std * num_std_dev)
     return ds
-
 
 def calculate_obv(ds):
 
@@ -62,7 +51,7 @@ def calculate_obv(ds):
 
 def calculate_signals(ds):
     ds['Signal'] = 'Neutral'
-    for i in range(1, len(ds)):
+    for i in range(0, len(ds)):
         
         if ds['Adj Close'].iloc[i] < ds['Bollinger Lower Band'].iloc[i]:
             ds.at[i, 'SignalBB'] = 'Buy'
@@ -88,7 +77,6 @@ def calculate_signals(ds):
             ds.at[i, 'SignalSMA'] = 'Neutral'
     
     return ds
-
 def signal_map(df):
     map = {'Buy': 1, 'Sell': -1, 'Neutral': 0}
     df['SignalSMA_Encoded'] = df['SignalSMA'].map(map)
@@ -96,13 +84,27 @@ def signal_map(df):
     df['SignalBB_Encoded'] = df['SignalBB'].map(map)
     return df
 
-new_df = calculate_sma(new_df,56)
-new_df = calculate_bollinger_bands(new_df,window=3, num_std_dev=2)
-new_df = calculate_obv(new_df)
-new_df.dropna(inplace=True)
-new_df = calculate_signals(new_df)
-new_df = signal_map(new_df)
-new_df.dropna(inplace=True)
+def check_profit(price, signal, start_cash):
+    current_cash = start_cash
+    current_stock = 0
+
+    for i in range(len(price)):
+        if signal.iloc[i] == 1 and current_cash > 0:
+            # Buy stocks
+            current_stock = current_cash / price.iloc[i]
+            current_cash = 0
+        elif signal.iloc[i] == -1 and current_stock > 0:
+            # Sell stocks
+            current_cash = current_stock * price.iloc[i]
+            current_stock = 0
+        #    print(signal.index[i], "Sell")
+        #print(current_cash,signal.iloc[i])
+
+    final_value = current_cash + current_stock * price.iloc[-1]
+    profit = final_value - start_cash
+    profit_percentage = (profit / start_cash) * 100
+    print("start_cash",start_cash,'final_value',final_value,"profit",profit,"profit_percentage",profit_percentage)
+    return profit, profit_percentage
 
 def logistic_regression(df):
     # Create features and target
@@ -110,7 +112,7 @@ def logistic_regression(df):
     target = df["SignalSMA_Encoded"]
 
     # Split the data
-    X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.3, random_state=42)
 
     # Standardize the features
     scaler = StandardScaler()
@@ -128,6 +130,82 @@ def logistic_regression(df):
 
     return model, scaler
 
-print(new_df)
+def random_forest(df):
 
-model, scaler = logistic_regression(new_df)
+    features = df[['Adj Close', 'SMA']]
+    target = df["SignalSMA_Encoded"]
+    X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.3, random_state=42)
+
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train_scaled, y_train)
+
+    predictions = model.predict(X_test_scaled)
+
+    accuracy = accuracy_score(y_test, predictions)
+    print(f"Random Forest Model Accuracy: {accuracy * 100:.2f}%")
+    return model
+
+sd = '1887-12-31'
+ed = '2023-12-31'
+data = yf.download("AAPL" ,start=sd, end=ed)
+data.to_csv("AAPL.csv")
+df = pd.read_csv("AAPL.csv")
+
+pd_sd = pd.to_datetime(sd)
+pd_ed = pd.to_datetime(ed)
+
+
+
+
+
+stock_df = df[['Date', 'Adj Close','Volume']]
+stock_df['Date'] = pd.to_datetime(stock_df['Date'])
+
+
+stock_df = calculate_sma(stock_df,28)
+stock_df = calculate_bollinger_bands(stock_df,window=3, num_std_dev=2)
+stock_df = calculate_obv(stock_df)
+
+stock_df = calculate_signals(stock_df)
+stock_df = signal_map(stock_df)
+stock_df.dropna(inplace=True)
+df_train = stock_df[(stock_df['Date'] >= pd_sd) & (stock_df['Date'] <= pd_ed)]
+model, scaler = logistic_regression(df_train)
+modelrf = random_forest(df_train)
+
+df_filter = stock_df[(stock_df['Date'] >= pd.to_datetime('2023-01-01'))]
+plt.figure(figsize=(14, 7))
+plt.plot(df_filter['Date'], df_filter['Adj Close'], label='Adj Close', color='blue')
+plt.plot(df_filter['Date'], df_filter['SMA'], label='SMA', color='orange')
+
+df_buy_signals = df_filter[df_filter['SignalSMA'] == 'Buy']
+df_sell_signals = df_filter[df_filter['SignalSMA'] == 'Sell']
+    
+plt.scatter(df_buy_signals['Date'], df_buy_signals['Adj Close'], label='Buy Signal', marker='^', color='green', alpha=1)
+plt.scatter(df_sell_signals['Date'], df_sell_signals['Adj Close'], label='Sell Signal', marker='v', color='red', alpha=1)
+plt.xlabel('Date')
+plt.ylabel('Price')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+profit1, profit_percentage1 = check_profit(df_filter['Adj Close'],df_filter['SignalSMA_Encoded'],1000)
+print("TI : profit",profit1,'profit_percentage',profit_percentage1)
+
+X_test_scaled = scaler.transform(df_filter[['Adj Close', 'SMA']])
+y_pred = model.predict(X_test_scaled)
+yrf_pred = model.predict(df_filter[['Adj Close', 'SMA']])
+
+profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(y_pred),1000)
+print("ML LR : profit",profit2,'profit_percentage',profit_percentage2)
+
+profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(yrf_pred),1000)
+print("ML RF : profit",profit2,'profit_percentage',profit_percentage2)
+
+
+
+print(stock_df)
