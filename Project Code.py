@@ -13,9 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import GradientBoostingClassifier
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 
@@ -50,7 +48,7 @@ def calculate_obv(ds):
     return ds
 
 def calculate_signals(ds):
-    ds['Signal'] = 'Neutral'
+    #ds['Signal'] = 'Neutral'
     for i in range(0, len(ds)):
         
         if ds['Adj Close'].iloc[i] < ds['Bollinger Lower Band'].iloc[i]:
@@ -82,6 +80,7 @@ def signal_map(df):
     df['SignalSMA_Encoded'] = df['SignalSMA'].map(map)
     df['SignalOBV_Encoded'] = df['SignalOBV'].map(map)
     df['SignalBB_Encoded'] = df['SignalBB'].map(map)
+    df.to_csv("test.csv")
     return df
 
 def check_profit(price, signal, start_cash):
@@ -106,20 +105,26 @@ def check_profit(price, signal, start_cash):
     print("start_cash",start_cash,'final_value',final_value,"profit",profit,"profit_percentage",profit_percentage)
     return profit, profit_percentage
 
-def logistic_regression(df):
+def logistic_regression(df, feature, target):
     # Create features and target
-    features = df[['Adj Close', 'SMA']]
-    target = df["SignalSMA_Encoded"]
+   
+    cols = ['Adj Close']
+    for f in feature:
+        cols.append(f)
+
+    features = df[cols]
+    target = df[target]
 
     # Split the data
     X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.3, random_state=42)
-
+  
     # Standardize the features
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
     # Train the logistic regression model
+    print(y_train.value_counts())
     model = LogisticRegression(max_iter=1000)
     model.fit(X_train_scaled, y_train)
 
@@ -130,10 +135,14 @@ def logistic_regression(df):
 
     return model, scaler
 
-def random_forest(df):
+def random_forest(df, feature, target):
 
-    features = df[['Adj Close', 'SMA']]
-    target = df["SignalSMA_Encoded"]
+    cols = ['Adj Close']
+    for f in feature:
+        cols.append(f)
+
+    features = df[cols]
+    target = df[target]
     X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.3, random_state=42)
 
     scaler = StandardScaler()
@@ -147,7 +156,133 @@ def random_forest(df):
 
     accuracy = accuracy_score(y_test, predictions)
     print(f"Random Forest Model Accuracy: {accuracy * 100:.2f}%")
-    return model
+    return model, scaler
+
+def support_vector_machine(df, feature, target):
+    cols = ['Adj Close']
+    for f in feature:
+        cols.append(f)
+
+    features = df[cols]
+    target = df[target]
+    X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.3, random_state=42)
+
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    model = SVC(kernel='linear')
+    model.fit(X_train_scaled, y_train)
+
+    predictions = model.predict(X_test_scaled)
+
+    accuracy = accuracy_score(y_test, predictions)
+    print(f"Support Vector Machine Model Accuracy: {accuracy * 100:.2f}%")
+    return model, scaler
+
+
+
+def process_indicator(df_filter,indicators,signal,signal_encoded ):
+    ind_size = len(indicators)
+    modellr, scaler = logistic_regression(df_train,indicators,signal_encoded)
+    modelrf, _ = random_forest(df_train,indicators,signal_encoded)
+    modelsvm, _ = support_vector_machine(df_train,indicators,signal_encoded)
+
+
+
+    plt.figure(figsize=(14, 7))
+    plt.plot(df_filter['Date'], df_filter['Adj Close'], label='Adj Close', color='blue')
+    if ind_size>0:
+        plt.plot(df_filter['Date'], df_filter[indicators[0]], label=indicators[0], color='orange')
+    if ind_size>1:
+        plt.plot(df_filter['Date'], df_filter[indicators[1]], label=indicators[1], color='orange')
+    
+    df_buy_signals = df_filter[df_filter[signal] == 'Buy']
+    df_sell_signals = df_filter[df_filter[signal] == 'Sell']
+    plt.scatter(df_buy_signals['Date'], df_buy_signals['Adj Close'], label='Buy Signal', marker='^', color='green', alpha=1)
+    plt.scatter(df_sell_signals['Date'], df_sell_signals['Adj Close'], label='Sell Signal', marker='v', color='red', alpha=1)
+    plt.xlabel('Date')
+    plt.ylabel('Price')
+    plt.title(signal)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    profit1, profit_percentage1 = check_profit(df_filter['Adj Close'],df_filter[signal_encoded],1000)
+    print("TI : profit",profit1,'profit_percentage',profit_percentage1)
+    if ind_size==1:
+        X_test_scaled = scaler.transform(df_filter[['Adj Close', indicators[0]]])
+    if ind_size>=2:
+        X_test_scaled = scaler.transform(df_filter[['Adj Close', indicators[0],indicators[1]]])
+
+    #
+    ylr_pred = modellr.predict(X_test_scaled)
+    yrf_pred = modelrf.predict(X_test_scaled)
+    ysvm_pred = modelsvm.predict(X_test_scaled)
+
+    profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(ylr_pred),1000)
+    print("ML LR  : profit",profit2,'profit_percentage',profit_percentage2)
+
+    profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(yrf_pred),1000)
+    print("ML RF  : profit",profit2,'profit_percentage',profit_percentage2)
+
+    profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(ysvm_pred),1000)
+    print("ML SVM : profit",profit2,'profit_percentage',profit_percentage2)
+
+
+    plt.figure(figsize=(14, 7))
+    plt.plot(df_filter['Date'], df_filter['Adj Close'], label='Adj Close', color='blue')
+    if ind_size>0:
+        plt.plot(df_filter['Date'], df_filter[indicators[0]], label=indicators[0], color='orange')
+    if ind_size>1:
+        plt.plot(df_filter['Date'], df_filter[indicators[1]], label=indicators[1], color='orange')
+    df_buy_signals = df_filter[ylr_pred == 1]
+    df_sell_signals = df_filter[ylr_pred == -1]
+    plt.scatter(df_buy_signals['Date'], df_buy_signals['Adj Close'], label='Buy Signal', marker='^', color='green', alpha=1)
+    plt.scatter(df_sell_signals['Date'], df_sell_signals['Adj Close'], label='Sell Signal', marker='v', color='red', alpha=1)
+    plt.xlabel('Date')
+    plt.ylabel('Price')
+    plt.title("LR "+signal)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+    plt.figure(figsize=(14, 7))
+    plt.plot(df_filter['Date'], df_filter['Adj Close'], label='Adj Close', color='blue')
+    if ind_size>0:
+        plt.plot(df_filter['Date'], df_filter[indicators[0]], label=indicators[0], color='orange')
+    if ind_size>1:
+        plt.plot(df_filter['Date'], df_filter[indicators[1]], label=indicators[1], color='orange')
+    df_buy_signals = df_filter[yrf_pred == 1]
+    df_sell_signals = df_filter[yrf_pred == -1]
+    plt.scatter(df_buy_signals['Date'], df_buy_signals['Adj Close'], label='Buy Signal', marker='^', color='green', alpha=1)
+    plt.scatter(df_sell_signals['Date'], df_sell_signals['Adj Close'], label='Sell Signal', marker='v', color='red', alpha=1)
+    plt.xlabel('Date')
+    plt.ylabel('Price')
+    plt.title("RF "+signal)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+    plt.figure(figsize=(14, 7))
+    plt.plot(df_filter['Date'], df_filter['Adj Close'], label='Adj Close', color='blue')
+    if ind_size>0:
+        plt.plot(df_filter['Date'], df_filter[indicators[0]], label=indicators[0], color='orange')
+    if ind_size>1:
+        plt.plot(df_filter['Date'], df_filter[indicators[1]], label=indicators[1], color='orange')
+    df_buy_signals = df_filter[ysvm_pred == 1]
+    df_sell_signals = df_filter[ysvm_pred == -1]
+    plt.scatter(df_buy_signals['Date'], df_buy_signals['Adj Close'], label='Buy Signal', marker='^', color='green', alpha=1)
+    plt.scatter(df_sell_signals['Date'], df_sell_signals['Adj Close'], label='Sell Signal', marker='v', color='red', alpha=1)
+    plt.xlabel('Date')
+    plt.ylabel('Price')
+    plt.title("SVM "+signal)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
 
 sd = '1887-12-31'
 ed = '2023-12-31'
@@ -158,54 +293,24 @@ df = pd.read_csv("AAPL.csv")
 pd_sd = pd.to_datetime(sd)
 pd_ed = pd.to_datetime(ed)
 
-
-
-
-
 stock_df = df[['Date', 'Adj Close','Volume']]
 stock_df['Date'] = pd.to_datetime(stock_df['Date'])
 
 
 stock_df = calculate_sma(stock_df,28)
-stock_df = calculate_bollinger_bands(stock_df,window=3, num_std_dev=2)
+stock_df = calculate_bollinger_bands(stock_df,window=28, num_std_dev=2)
 stock_df = calculate_obv(stock_df)
 
 stock_df = calculate_signals(stock_df)
 stock_df = signal_map(stock_df)
 stock_df.dropna(inplace=True)
+
 df_train = stock_df[(stock_df['Date'] >= pd_sd) & (stock_df['Date'] <= pd_ed)]
-model, scaler = logistic_regression(df_train)
-modelrf = random_forest(df_train)
-
 df_filter = stock_df[(stock_df['Date'] >= pd.to_datetime('2023-01-01'))]
-plt.figure(figsize=(14, 7))
-plt.plot(df_filter['Date'], df_filter['Adj Close'], label='Adj Close', color='blue')
-plt.plot(df_filter['Date'], df_filter['SMA'], label='SMA', color='orange')
 
-df_buy_signals = df_filter[df_filter['SignalSMA'] == 'Buy']
-df_sell_signals = df_filter[df_filter['SignalSMA'] == 'Sell']
-    
-plt.scatter(df_buy_signals['Date'], df_buy_signals['Adj Close'], label='Buy Signal', marker='^', color='green', alpha=1)
-plt.scatter(df_sell_signals['Date'], df_sell_signals['Adj Close'], label='Sell Signal', marker='v', color='red', alpha=1)
-plt.xlabel('Date')
-plt.ylabel('Price')
-plt.legend()
-plt.grid(True)
-plt.show()
-
-profit1, profit_percentage1 = check_profit(df_filter['Adj Close'],df_filter['SignalSMA_Encoded'],1000)
-print("TI : profit",profit1,'profit_percentage',profit_percentage1)
-
-X_test_scaled = scaler.transform(df_filter[['Adj Close', 'SMA']])
-y_pred = model.predict(X_test_scaled)
-yrf_pred = model.predict(df_filter[['Adj Close', 'SMA']])
-
-profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(y_pred),1000)
-print("ML LR : profit",profit2,'profit_percentage',profit_percentage2)
-
-profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(yrf_pred),1000)
-print("ML RF : profit",profit2,'profit_percentage',profit_percentage2)
-
-
-
-print(stock_df)
+print("==============SMA================")
+process_indicator(df_filter,["SMA"],"SignalSMA","SignalSMA_Encoded")
+print("==============Bollinger Band Start ================")
+process_indicator(df_filter,["Bollinger Lower Band","Bollinger Upper Band"],"SignalBB","SignalBB_Encoded")
+print("==============OBV Start ================")
+process_indicator(df_filter,["OBV"],"SignalOBV","SignalOBV_Encoded")
