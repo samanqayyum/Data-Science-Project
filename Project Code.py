@@ -9,7 +9,7 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.linear_model import LogisticRegression
@@ -414,12 +414,35 @@ def support_vector_machine(df, feature, target):
     X_test_scaled = scaler.transform(X_test)
 
     # Initialize and train the Support Vector Machine model with a linear kernel
-    model = SVC(kernel='linear')
+
+    # defining parameter range 
+    # param_grid = {'C': [0.1, 1, 10, 100, 1000],  
+    #           'gamma': [1, 0.1, 0.01, 0.001, 0.0001], 
+    #           'kernel': ['linear','rbf']}
+    #C=1000, gamma=1, kernel='linear'
+    param_grid = {'C': [0.0001,0.001],  
+              'gamma': [1], 
+              'kernel': ['linear']}
+    grid = GridSearchCV(SVC(), param_grid, refit = True, verbose = 3) 
+    model= grid
+    # fitting the model for grid search 
+    #grid.fit(X_train, y_train) 
+
+   
+    
+    #model = SVC(C=1000, gamma=1, kernel='linear')
     model.fit(X_train_scaled, y_train)
 
-    # Predict the target values for the test set
-    predictions = model.predict(X_test_scaled)
+    # print best parameter after tuning 
+    print(grid.best_params_) 
     
+    #print how our model looks after hyper-parameter tuning 
+    print(grid.best_estimator_) 
+
+    # Predict the target values for the test set
+    #predictions = model.predict(X_test_scaled)
+    predictions = model.predict(X_test_scaled)
+
     # Evaluate the model's performance
     accuracy = accuracy_score(y_test, predictions)
     
@@ -504,7 +527,7 @@ def process_indicator(df_train, df_filter, indicators, signal, signal_encoded):
     profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(ysvm_pred),1000)
     # Print profit and percentage for Support Vector Machine
     print("ML SVM : profit",profit2,'profit_percentage',profit_percentage2)
-
+    return
 
     # Check if the first indicator is On-Balance Volume (OBV)
     if(indicators[0]=="OBV"):
@@ -720,14 +743,15 @@ df_train = stock_df[(stock_df['Date'] >= pd_sd) & (stock_df['Date'] <= pd_ed)]
 df_filter = stock_df[(stock_df['Date'] >= pd.to_datetime('2023-01-01'))]
 
 
-# Process and evaluate indicators and models
-# Process and evaluate Simple Moving Average (SMA) indicator
+# # Process and evaluate indicators and models
+# # Process and evaluate Simple Moving Average (SMA) indicator
 print("==============SMA================")
-# Call process_indicator to evaluate the performance of the SMA trading signals
-# Pass 'SMA' as the indicator, 'SignalSMA' as the trading signal column, and 'SignalSMA_Encoded' as the encoded signal column
+# # Call process_indicator to evaluate the performance of the SMA trading signals
+# # Pass 'SMA' as the indicator, 'SignalSMA' as the trading signal column, and 'SignalSMA_Encoded' as the encoded signal column
 process_indicator(df_train, df_filter,["SMA"],"SignalSMA","SignalSMA_Encoded")
 
 # Process and evaluate Bollinger Bands indicator
+{'C': 2000, 'gamma': 1, 'kernel': 'linear'}
 print("==============Bollinger Band Start ================")
 # Call process_indicator to evaluate the performance of Bollinger Bands trading signals
 # Pass 'Bollinger Lower Band' and 'Bollinger Upper Band' as indicators, 'SignalBB' as the trading signal column, and 'SignalBB_Encoded' as the encoded signal column
@@ -737,4 +761,5 @@ process_indicator(df_train, df_filter,["Bollinger Lower Band","Bollinger Upper B
 print("==============OBV Start ================")
 # Call process_indicator to evaluate the performance of OBV trading signals
 # Pass 'OBV' as the indicator, 'SignalOBV' as the trading signal column, and 'SignalOBV_Encoded' as the encoded signal column
+SVC(C=100, gamma=1, kernel='linear')
 process_indicator(df_train, df_filter,["OBV"],"SignalOBV","SignalOBV_Encoded")
