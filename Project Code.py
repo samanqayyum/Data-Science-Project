@@ -17,6 +17,7 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 import warnings
+import seaborn as sns
 
 # Ignore warnings for cleaner output
 warnings.filterwarnings('ignore')
@@ -299,28 +300,58 @@ def logistic_regression(df, feature, target):
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    #Initialize and Train the logistic regression model
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X_train_scaled, y_train)
+    # Define the model
+    model = LogisticRegression(max_iter=1000, random_state=42)
+
+    # Define the hyperparameters to tune
+    param_grid = {
+        'C': [0.01, 0.1, 1],  # Regularization strength
+        'penalty': ['l2'],  # Regularization types
+        'solver': ['saga', 'liblinear', 'lbfgs', 'newton-cg']  # Solvers
+    }
+
+    # Initialize GridSearchCV
+    grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring='f1_macro', n_jobs=-1, verbose=2)
+
+    # Fit the model
+    grid_search.fit(X_train_scaled, y_train)
+
+    # Print the best parameters
+    print("Best parameters found: ", grid_search.best_params_)
+
+    # Train the final model with the best parameters
+    best_model = grid_search.best_estimator_
+
+    # Fit the best model on the training data
+    best_model.fit(X_train_scaled, y_train)
+
+    # Evaluate on the test data
+    y_pred = best_model.predict(X_test_scaled)
 
     # Print class distribution in training data
     print("Training class distribution:")
     print(y_train.value_counts()) 
-    
-    # Evaluate the model
-    # Make predictions on the test set
-    y_pred = model.predict(X_test_scaled)
-    
+
     # Evaluate the model by printing confusion matrix 
     print("Confusion Matrix:")
-    print(confusion_matrix(y_test, y_pred)) 
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    print(conf_matrix) 
     
     # Evaluate the model by printing classification report
     print("Classification Report:")
     print(classification_report(y_test, y_pred))
+
+    # Create a heatmap
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', cbar=False)
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted Labels')
+    plt.ylabel('True Labels')
+    plt.show()
+        
  
     # Return the trained model and the scaler used for feature scaling
-    return model, scaler
+    return best_model, scaler
 
 # Function to train and evaluate a Random Forest Classifier model
 def random_forest(df, feature, target):
@@ -359,22 +390,61 @@ def random_forest(df, feature, target):
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # Initialize and train Random Forest Classifier model
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train_scaled, y_train)
+   # Define the model
+    model = RandomForestClassifier(random_state=42)
+
+    # Define the hyperparameters to tune
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20, 30],
+        'max_features': ['auto', 'sqrt', 'log2']
+    }
+
+    # Initialize GridSearchCV
+    grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring='f1_macro', n_jobs=-1, verbose=2)
+
+    # Fit the model
+    grid_search.fit(X_train_scaled, y_train)
 
 
-    # Predict on the test set
-    predictions = model.predict(X_test_scaled)
+    
+    # Print the best parameters
+    print("Best parameters found: ", grid_search.best_params_)
+
+    # Train the final model with the best parameters
+    best_model = grid_search.best_estimator_
+
+    # Fit the best model on the training data
+    best_model.fit(X_train_scaled, y_train)
+
+    # Evaluate on the test data
+    predictions = best_model.predict(X_test_scaled)
     
     # Evaluate the model's performance
     accuracy = accuracy_score(y_test, predictions)
     
     # Print the accuracy as a percentage
     print(f"Random Forest Model Accuracy: {accuracy * 100:.2f}%")
+
+     # Evaluate the model by printing confusion matrix 
+    print("Confusion Matrix:")
+    conf_matrix = confusion_matrix(y_test, predictions)
+    print(conf_matrix) 
+    
+    # Evaluate the model by printing classification report
+    print("Classification Report:")
+    print(classification_report(y_test, predictions))
+
+    # Create a heatmap
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', cbar=False)
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted Labels')
+    plt.ylabel('True Labels')
+    plt.show()
     
     # Return the trained model and the scaler used for feature scaling
-    return model, scaler
+    return best_model, scaler
 
 # Function to train and evaluate a Support Vector Machine (SVM) model
 def support_vector_machine(df, feature, target):
@@ -420,10 +490,10 @@ def support_vector_machine(df, feature, target):
     #           'gamma': [1, 0.1, 0.01, 0.001, 0.0001], 
     #           'kernel': ['linear','rbf']}
     #C=1000, gamma=1, kernel='linear'
-    param_grid = {'C': [0.0001,0.001],  
-              'gamma': [1], 
-              'kernel': ['linear']}
-    grid = GridSearchCV(SVC(), param_grid, refit = True, verbose = 3) 
+    param_grid = {'C': [0.0001,0.001,0.1,1],  
+              'gamma': [1, 0.1, 0.01], 
+              'kernel': ['linear','rbf']}
+    grid = GridSearchCV(SVC(), param_grid, refit = True, scoring='f1_macro', verbose = 3) 
     model= grid
     # fitting the model for grid search 
     #grid.fit(X_train, y_train) 
@@ -448,6 +518,23 @@ def support_vector_machine(df, feature, target):
     
     # Print the accuracy as a percentage
     print(f"Support Vector Machine Model Accuracy: {accuracy * 100:.2f}%")
+
+    # Evaluate the model by printing confusion matrix 
+    print("Confusion Matrix:")
+    conf_matrix = confusion_matrix(y_test, predictions)
+    print(conf_matrix) 
+    
+    # Evaluate the model by printing classification report
+    print("Classification Report:")
+    print(classification_report(y_test, predictions))
+
+    # Create a heatmap
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', cbar=False)
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted Labels')
+    plt.ylabel('True Labels')
+    plt.show()
     
     # Return the trained model and the scaler used for feature scaling
     return model, scaler
@@ -527,7 +614,7 @@ def process_indicator(df_train, df_filter, indicators, signal, signal_encoded):
     profit2, profit_percentage2 = check_profit(df_filter['Adj Close'],pd.Series(ysvm_pred),1000)
     # Print profit and percentage for Support Vector Machine
     print("ML SVM : profit",profit2,'profit_percentage',profit_percentage2)
-    return
+   
 
     # Check if the first indicator is On-Balance Volume (OBV)
     if(indicators[0]=="OBV"):
@@ -688,7 +775,7 @@ def process_indicator(df_train, df_filter, indicators, signal, signal_encoded):
     
     
 # Define the start and end dates for historical data
-sd = '1887-12-31'  # Start date for historical data
+sd = '2021-12-31'  #'1887-12-31' Start date for historical data
 ed = '2023-12-31' # End date for historical data
 
 
@@ -751,7 +838,7 @@ print("==============SMA================")
 process_indicator(df_train, df_filter,["SMA"],"SignalSMA","SignalSMA_Encoded")
 
 # Process and evaluate Bollinger Bands indicator
-{'C': 2000, 'gamma': 1, 'kernel': 'linear'}
+#{'C': 2000, 'gamma': 1, 'kernel': 'linear'}
 print("==============Bollinger Band Start ================")
 # Call process_indicator to evaluate the performance of Bollinger Bands trading signals
 # Pass 'Bollinger Lower Band' and 'Bollinger Upper Band' as indicators, 'SignalBB' as the trading signal column, and 'SignalBB_Encoded' as the encoded signal column
@@ -761,5 +848,5 @@ process_indicator(df_train, df_filter,["Bollinger Lower Band","Bollinger Upper B
 print("==============OBV Start ================")
 # Call process_indicator to evaluate the performance of OBV trading signals
 # Pass 'OBV' as the indicator, 'SignalOBV' as the trading signal column, and 'SignalOBV_Encoded' as the encoded signal column
-SVC(C=100, gamma=1, kernel='linear')
+#SVC(C=100, gamma=1, kernel='linear')
 process_indicator(df_train, df_filter,["OBV"],"SignalOBV","SignalOBV_Encoded")
