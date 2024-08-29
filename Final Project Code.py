@@ -288,7 +288,7 @@ def check_profit(price, signal, start_cash):
     print("start_cash", start_cash, 'final_value', final_value,
           "profit", profit, "percentage_profit", percentage_profit)
 
-    # Return the profit and percentage profit as a tuple
+    # Return the profit and percentage profit
     return profit, percentage_profit
 
 # Function to train and evaluate a Logistic Regression model
@@ -875,7 +875,8 @@ df = pd.read_csv("AAPL.csv")
 print(df)
 # Display the first few rows of the DataFrame to verify the data
 print(df.head())
-
+# Print descriptive statistics for the DataFrame
+print(df.describe())
 
 # Convert date strings to datetime objects
 # Convert the start date string to a datetime object
@@ -939,7 +940,7 @@ process_indicator(df_train, df_filter, [
 # Process and evaluate On-Balance Volume (OBV) indicator
 print("==============OBV Start ================")
 # Call process_indicator to evaluate the performance of OBV trading signals
-# Pass 'OBV' as the indicator, 'SignalOBV' as the trading signal column, and /
+# Pass 'OBV' as the indicator, 'SignalOBV' as the trading signal column, and \
 # 'SignalOBV_Encoded' as the encoded signal column
 process_indicator(df_train, df_filter, [
                   "OBV"], "SignalOBV", "SignalOBV_Encoded")
